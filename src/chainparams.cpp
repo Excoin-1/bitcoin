@@ -54,14 +54,14 @@ void ReadRegTestArgs(const ArgsManager& args, CChainParams::RegTestOptions& opti
         const auto value{arg.substr(found + 1)};
         int32_t height;
         if (!ParseInt32(value, &height) || height < 0 || height >= std::numeric_limits<int>::max()) {
-            throw std::runtime_error(strprintf("Invalid height value (%s) for -testactivationheight=name@height.", arg));
+            throw std::runtime_error(strprintf("Invalid height value (%s) for -testactivationheight=name@height.", value));
         }
 
         const auto deployment_name{arg.substr(0, found)};
         if (const auto buried_deployment = GetBuriedDeployment(deployment_name)) {
             options.activation_heights[*buried_deployment] = height;
         } else {
-            throw std::runtime_error(strprintf("Invalid name (%s) for -testactivationheight=name@height.", arg));
+            throw std::runtime_error(strprintf("Invalid name (%s) for -testactivationheight=name@height.", deployment_name));
         }
     }
 
@@ -134,3 +134,50 @@ void SelectParams(const ChainType chain)
     SelectBaseParams(chain);
     globalChainParams = CreateChainParams(gArgs, chain);
 }
+
+// 自定义创世块生成函数
+static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
+{
+    CMutableTransaction txNew;
+    txNew.nVersion = 1;
+    txNew.vin.resize(1);
+    txNew.vout.resize(1);
+    txNew.vin[0].scriptSig = CScript() << 486604799 << CScriptNum(4) << std::vector<unsigned char>((const unsigned char*)pszTimestamp, (const unsigned char*)pszTimestamp + strlen(pszTimestamp));
+    txNew.vout[0].nValue = genesisReward;
+    txNew.vout[0].scriptPubKey = genesisOutputScript;
+
+    CBlock genesis;
+    genesis.nTime    = nTime;
+    genesis.nBits    = nBits;
+    genesis.nNonce   = nNonce;
+    genesis.nVersion = nVersion;
+    genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
+    genesis.hashPrevBlock.SetNull();
+    genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
+    return genesis;
+}
+
+// 主网参数
+std::unique_ptr<const CChainParams> CChainParams::Main()
+{
+    return std::unique_ptr<const CChainParams>(new CMainParams());
+}
+
+// 测试网参数
+std::unique_ptr<const CChainParams> CChainParams::TestNet()
+{
+    return std::unique_ptr<const CChainParams>(new CTestNetParams());
+}
+
+// Signet 参数
+std::unique_ptr<const CChainParams> CChainParams::SigNet(const SigNetOptions& options)
+{
+    return std::unique_ptr<const CChainParams>(new CSigNetParams(options));
+}
+
+// RegTest 参数
+std::unique_ptr<const CChainParams> CChainParams::RegTest(const RegTestOptions& options)
+{
+    return std::unique_ptr<const CChainParams>(new CRegTestParams(options));
+}
+
